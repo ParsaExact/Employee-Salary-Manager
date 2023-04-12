@@ -54,9 +54,9 @@ public:
     WorkingHour(int i, int d, pair<int, int> wh)
         : employee_id(i), day(d), working_hour(wh) {}
     int get_id() { return employee_id; }
-    int calculate_duration();
-    void print_working_hour();                                                                     // done
-    void add_working_hour(int id, int day, int start, int end, vector<WorkingHour> working_hours); // done check needed
+    int calculate_duration() { return working_hour.second - working_hour.first; };
+    void print_working_hour();                                            // done
+    bool available_add_working_hour(int id, int day, int start, int end); // done check needed
 private:
     int employee_id;
     int day;
@@ -97,7 +97,7 @@ public:
         : id(i), name(n), age(a), level(l) {}
     void print_file(); // done
     int get_id() { return id; }
-    void match_to_team(Team* emp_team) { employee_team = emp_team; }
+    void match_to_team(Team *emp_team) { employee_team = emp_team; }
     int calculate_salary();
     int calculate_working_hours();
     int calculate_tax();
@@ -142,9 +142,10 @@ public:
     void get_command();
     void initial_working_hours();
     void update_salary_config(vector<string> command_words);
-    void add_working_hour();
+    void add_working_hour(vector<string> command_words); // need to check
 
 private:
+    bool available_add_request(int id, int day, int start, int end);
     void match_employees_and_teams();
     int find_level(string name);
     int find_employee(int id);
@@ -190,30 +191,15 @@ void WorkingHour ::print_working_hour()
     cout << employee_id << ' ' << day << ' ' << working_hour.first << ' ' << working_hour.second << endl;
 }
 
-void WorkingHour ::add_working_hour(int id, int day, int start, int end, vector<WorkingHour> working_hours)
+bool WorkingHour ::available_add_working_hour(int id, int new_day, int start, int end)
 {
-    bool found = true;
-    for (auto x : working_hours)
-        if (x.employee_id == id)
-            found = false;
-    if (found)
+    if (((start >= working_hour.first && start < working_hour.second) || (end > working_hour.first &&
+        end <= working_hour.second)) && new_day == day && id == employee_id)
     {
-        cout << ERROR_EMPLOYEE << endl;
-        return;
+        cout << ERROR_INTERVAL << endl;
+        return false;
     }
-    if (day > 30 || day < 1 || start >= end)
-    {
-        cout << ERROR_ARGUMENTS << endl;
-        return;
-    }
-    for (auto x : working_hours)
-        if (((start >= x.working_hour.first && start <= x.working_hour.second) || (end >= x.working_hour.first && end <= x.working_hour.second)) && x.day == day)
-        {
-            cout << ERROR_ARGUMENTS << endl;
-            return;
-        }
-    pair<int, int> interval = {start, end};
-    WorkingHour(id, day, interval);
+    return true;
 }
 
 void Salary ::print_salary()
@@ -227,35 +213,35 @@ void Salary ::print_salary()
 
 void Salary ::update_base_salary(string new_base_salary)
 {
-    if(new_base_salary == "-")
+    if (new_base_salary == "-")
         return;
     base_salary = stoi(new_base_salary);
 }
 
 void Salary ::update_salary_per_hour(string new_salary_per_hour)
 {
-    if(new_salary_per_hour == "-")
+    if (new_salary_per_hour == "-")
         return;
     salary_per_hour = stoi(new_salary_per_hour);
 }
 
 void Salary ::update_salary_per_extra_hour(string new_salary_per_extra_hour)
 {
-    if(new_salary_per_extra_hour == "-")
+    if (new_salary_per_extra_hour == "-")
         return;
     salary_per_extra_hour = stoi(new_salary_per_extra_hour);
 }
 
 void Salary ::update_official_working_hours(string new_official_working_hours)
 {
-    if(new_official_working_hours == "-")
+    if (new_official_working_hours == "-")
         return;
     official_working_hours = stoi(new_official_working_hours);
 }
 
 void Salary ::update_tax_percantage(string new_tax_percantage)
 {
-    if(new_tax_percantage == "-")
+    if (new_tax_percantage == "-")
         return;
     tax_percantage = stoi(new_tax_percantage);
 }
@@ -330,8 +316,9 @@ vector<WorkingHour *> ReadFiles ::read_working_hour_file()
     vector<WorkingHour *> allWorkingHour;
     for (int i = 0; i < working_hour_items.size(); i++)
     {
-        allWorkingHour.push_back(new WorkingHour(stoi(working_hour_items[i][0]), stoi(working_hour_items[i][1]),
-                                                 convert_interval_to_pair(working_hour_items[i][2])));
+        for (int j = 1; j < working_hour_items[i].size(); j += 2)
+            allWorkingHour.push_back(new WorkingHour(stoi(working_hour_items[i][0]), stoi(working_hour_items[i][j]),
+                                                     convert_interval_to_pair(working_hour_items[i][j + 1])));
     }
     return allWorkingHour;
 }
@@ -413,12 +400,50 @@ void HandleCommand ::update_salary_config(vector<string> command_words)
         cout << ERROR_LEVEL << endl;
 }
 
+bool HandleCommand ::available_add_request(int id, int day, int start, int end)
+{
+    if (day > 30 || day < 1 || start >= end)
+    {
+        cout << ERROR_ARGUMENTS << endl;
+        return false;
+    }
+    if(start < 0 || start > 24 || end > 24 || end < 0)
+    {
+        cout << ERROR_ARGUMENTS << endl;
+        return false;
+    }
+    for (WorkingHour *x : working_hours)
+        if (!(x->available_add_working_hour(id, day, start, end)))
+            return false;
+    return true;
+}
+
+void HandleCommand ::add_working_hour(vector<string> command_words)
+{
+    int employee_index = find_employee(stoi(command_words[1]));
+    if (employee_index == NOT_FOUND)
+        cout << ERROR_EMPLOYEE << endl;
+    else
+    {
+        if (available_add_request(stoi(command_words[1]), stoi(command_words[2]),
+                                  stoi(command_words[3]), stoi(command_words[4])))
+        {
+            pair<int, int> new_duration = {stoi(command_words[3]), stoi(command_words[4])};
+            working_hours.push_back(new WorkingHour(stoi(command_words[1]), stoi(command_words[2]), new_duration));
+            employees[employee_index].add_working_hour(working_hours[working_hours.size() - 1]);
+            cout << DONE_SUCCESSFULLY_MESSAGE << endl;
+        }
+    }
+}
+
 void HandleCommand ::get_command()
 {
     OutputFiles the_output;
     string command, line;
     while (getline(cin, line))
     {
+        for (auto i : employees)
+            i.print_file();
         vector<string> command_words = split_words(line, SPACE);
         command = command_words[0];
         if (command == "show_salary_config")
@@ -427,7 +452,7 @@ void HandleCommand ::get_command()
         }
         if (command == "add_working_hours")
         {
-            // add_working_hour(command_words);
+            add_working_hour(command_words);
         }
         if (command == "update_salary_config")
             update_salary_config(command_words);
@@ -438,12 +463,12 @@ void HandleCommand ::match_employees_and_teams()
 {
     vector<int> mem_ids;
     int employee_index;
-    for(int i = 0; i < teams.size(); i++)
+    for (int i = 0; i < teams.size(); i++)
     {
         mem_ids = teams[i].get_mem_ids();
         employee_index = find_employee(teams[i].get_head_id());
         employees[employee_index].match_to_team(&teams[i]);
-        for(int j = 0; j < mem_ids.size(); j++)
+        for (int j = 0; j < mem_ids.size(); j++)
         {
             employee_index = find_employee(mem_ids[j]);
             employees[employee_index].match_to_team(&teams[i]);
