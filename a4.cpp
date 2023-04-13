@@ -18,12 +18,15 @@ const string ERROR_EMPLOYEE = "EMPLOYEE_NOT_FOUND";
 const string ERROR_ARGUMENTS = "INVALID_ARGUMENTS";
 const string ERROR_INTERVAL = "INVALID_INTERVAL";
 const string DONE_SUCCESSFULLY_MESSAGE = "OK";
+const string EMPLOYEE_WITH_NO_TEAM = "N/A";
+const string ERROR_TEAM = "TEAM_NOT_FOUND";
 
 const char COMMA = ',';
 const char DASH = '-';
 const char DOLLAR = '$';
 const char SPACE = ' ';
 
+const int NUMBER_OF_MONTH_DAYS = 30;
 const int NOT_FOUND = -1;
 const int INITIAL_BOUNUS = 0;
 
@@ -33,11 +36,15 @@ class Team
 {
 public:
     int get_head_id() { return team_head_id; }
+    string get_team_id() { return team_id; }
+    void set_team_id(string _team_id) { team_id = _team_id; }
     vector<int> get_mem_ids() { return member_ids; }
-    void update_bonus();
+    void update_bonus(int bonus_perc) { bonus = bonus_perc; };
     Team(string ti, int thi, vector<int> mmids, int bmwh, double bwhmv)
-        : team_id(ti), team_head_id(thi), member_ids(mmids), bonus_min_working_hours(bmwh), bonus_working_hour_max_variance(bwhmv), bounus(INITIAL_BOUNUS) {}
-    void print_team(); // done
+        : team_id(ti), team_head_id(thi), member_ids(mmids), bonus_min_working_hours(bmwh),
+          bonus_working_hour_max_variance(bwhmv), bonus(INITIAL_BOUNUS) {}
+    void print_team();
+    int get_bonus() { return bonus; }
 
 private:
     string team_id;
@@ -45,7 +52,7 @@ private:
     vector<int> member_ids;
     int bonus_min_working_hours;
     double bonus_working_hour_max_variance;
-    int bounus;
+    int bonus;
 };
 
 class WorkingHour
@@ -55,6 +62,7 @@ public:
         : employee_id(i), day(d), working_hour(wh) {}
     int get_id() { return employee_id; }
     int get_day() { return day; }
+    pair<int, int> get_pair() { return working_hour; }
     int calculate_duration() { return working_hour.second - working_hour.first; };
     void print_working_hour();                                            // done
     bool available_add_working_hour(int id, int day, int start, int end); // done check needed
@@ -95,25 +103,33 @@ class Employee
 {
 public:
     Employee(int i, string n, int a, string l)
-        : id(i), name(n), age(a), level(l) {}
-    void print_file(); // done
+        : id(i), name(n), age(a), level_name(l), employee_team(NULL) {}
+    void print_file();
     int get_id() { return id; }
+    void set_level(Salary* new_level) { level = new_level; }
+    Salary* get_level() {return level;}
+    string get_level_name() { return level_name; }
     void match_to_team(Team *emp_team) { employee_team = emp_team; }
     int calculate_salary();
     int calculate_working_hours();
     int calculate_tax();
     int calculate_bonus();
     int calculate_total_earning();
+    int calculate_absent_days();
     void add_working_hour(WorkingHour *hour);
     void delete_working_hours(int day);
+    void show_personal_info();
+    void show_working_info();
+
 private:
+    bool day_counted_before(vector<int> counted_present_days, int day);
     vector<WorkingHour *> working_days;
     Team *employee_team;
     string name;
     int age;
-    string level;
+    string level_name;
     int id;
-    string team_id;
+    Salary* level;
 };
 
 class ReadFiles
@@ -129,12 +145,6 @@ public:
     vector<Salary> read_salary_file();
 };
 
-class OutputFiles
-{
-public:
-    void show_salary_config(vector<Salary> salary, string level);
-};
-
 class HandleCommand
 {
 public:
@@ -142,13 +152,19 @@ public:
     void get_command();
     void initial_working_hours();
     void update_salary_config(vector<string> command_words);
-    void add_working_hour(vector<string> command_words); // need to check
+    void add_working_hour(vector<string> command_words);
+    void report_total_hours_per_day(vector<string> commands);
+    void update_team_bonus(vector<string> commands);
+    void report_employee_per_hour(vector<string> command);
     void delete_working_hours(vector<string> command_words);
-    void free_trash_data(int day, int id);
+    void report_employee_salary(vector<string> command_words);
+    void show_salary_config(string level);
+    int find_level(string name);
 private:
+    void match_employees_and_levels();
+    void free_trash_data(int day, int id);
     bool available_add_request(int id, int day, int start, int end);
     void match_employees_and_teams();
-    int find_level(string name);
     int find_employee(int id);
     vector<Employee> employees;
     vector<WorkingHour *> working_hours;
@@ -170,9 +186,7 @@ vector<string> split_words(string line, char del)
         }
         if (i == line.size() - 1)
         {
-            words_in_line.push_back(line.substr(0));
-            line = line.substr(i + 1, line.size());
-            i = 0;
+            words_in_line.push_back(line);
         }
     }
     return words_in_line;
@@ -181,6 +195,7 @@ vector<string> split_words(string line, char del)
 void Team ::print_team()
 {
     cout << team_id << ' ' << team_head_id << ' ' << endl;
+    cout << "Bonus:" << bonus << endl;
     for (auto x : member_ids)
         cout << x << ' ';
     cout << endl
@@ -195,8 +210,9 @@ void WorkingHour ::print_working_hour()
 bool WorkingHour ::available_add_working_hour(int id, int new_day, int start, int end)
 {
     if ((((start >= working_hour.first && start < working_hour.second) || (end > working_hour.first &&
-        end <= working_hour.second)) || (start <= working_hour.first && end >= working_hour.second))
-         && new_day == day && id == employee_id)
+                                                                           end <= working_hour.second)) ||
+         (start <= working_hour.first && end >= working_hour.second)) &&
+        new_day == day && id == employee_id)
     {
         cout << ERROR_INTERVAL << endl;
         return false;
@@ -273,14 +289,104 @@ void Employee ::add_working_hour(WorkingHour *hour)
 
 void Employee ::delete_working_hours(int day)
 {
-    for(int i = 0; i < working_days.size(); i++)
+    for (int i = 0; i < working_days.size(); i++)
     {
-        if(working_days[i]->get_day() == day)
+        if (working_days[i]->get_day() == day)
         {
             working_days.erase(working_days.begin() + i);
             i--;
         }
     }
+}
+
+void Employee ::show_personal_info()
+{
+    cout << "ID: " << id << endl;
+    cout << "Name: " << name << endl;
+    cout << "Age: " << age << endl;
+    cout << "Level: " << level_name << endl;
+    if (employee_team != NULL)
+        cout << "Team ID: " << employee_team->get_team_id() << endl;
+    else
+        cout << "Team ID: " << EMPLOYEE_WITH_NO_TEAM << endl;
+}
+
+int Employee ::calculate_working_hours()
+{
+    int total_working_hours = 0;
+    for (int i = 0; i < working_days.size(); i++)
+    {
+        total_working_hours += working_days[i]->calculate_duration();
+    }
+    return total_working_hours;
+}
+
+bool Employee ::day_counted_before(vector<int> counted_present_days, int day)
+{
+    for (int i = 0; i < counted_present_days.size(); i++)
+    {
+        if (counted_present_days[i] == day)
+            return true;
+    }
+    return false;
+}
+
+int Employee ::calculate_absent_days()
+{
+    int present_days = 0;
+    vector<int> counted_present_days;
+    for (int i = 0; i < working_days.size(); i++)
+    {
+        if (!day_counted_before(counted_present_days, working_days[i]->get_day()))
+        {
+            present_days++;
+            counted_present_days.push_back(working_days[i]->get_day());
+        }
+    }
+    return NUMBER_OF_MONTH_DAYS - present_days;
+}
+
+int Employee ::calculate_salary()
+{
+    int total_working_hours = calculate_working_hours();
+    if (total_working_hours <= level->get_official_working_hours())
+        return level->get_base_salary() + total_working_hours * level->get_salary_per_hour();
+
+    return level->get_base_salary() + level->get_official_working_hours() * level->get_salary_per_hour() +
+           (total_working_hours - level->get_official_working_hours()) * level->get_salary_per_extra_hour();
+}
+
+int Employee ::calculate_bonus()
+{
+    int bonus = calculate_salary() * employee_team->get_bonus() / 100;
+    return bonus;
+}
+
+int Employee::calculate_tax()
+{
+    int tax = (calculate_salary() + calculate_bonus()) * level->get_tax_percantage() / 100;
+    return tax;
+}
+
+int Employee ::calculate_total_earning()
+{
+    int total_earn = calculate_salary() + calculate_bonus() - calculate_tax();
+    return total_earn;
+}
+
+void Employee ::show_working_info()
+{
+    cout << "Total Working Hours: " << calculate_working_hours() << endl;
+    cout << "works till here" << endl;
+    cout << "Absent Days: " << calculate_absent_days() << endl;
+    cout << "Salary: " << calculate_salary() << endl;
+    if (employee_team == NULL)
+        cout << "Bonus: "
+             << "0" << endl;
+    else
+        cout << "Bonus: " << calculate_bonus() << endl;
+    cout << "Tax: " << calculate_tax() << endl;
+    cout << "Total Earning: " << calculate_total_earning() << endl;
 }
 
 pair<int, int> ReadFiles ::convert_interval_to_pair(string s)
@@ -319,7 +425,8 @@ vector<Employee> ReadFiles ::read_employee_file()
     vector<Employee> allEmp;
     for (int i = 0; i < employee_items.size(); i++)
     {
-        allEmp.push_back(Employee(stoi(employee_items[i][0]), employee_items[i][1], stoi(employee_items[i][2]), employee_items[i][3]));
+        allEmp.push_back(Employee(stoi(employee_items[i][0]), employee_items[i][1], stoi(employee_items[i][2]),
+                                  employee_items[i][3].substr(0,employee_items[i][3].size() - 1)));
     }
     return allEmp;
 }
@@ -364,7 +471,9 @@ vector<Team> ReadFiles ::read_teams_file()
     vector<Team> allTeamItems;
     for (int i = 0; i < team_ids.size(); i++)
     {
-        allTeamItems.push_back(Team((team_ids[i][0]), stoi(team_ids[i][1]), convert_member_ids(team_ids[i][2]), stoi(team_ids[i][3]), stod(team_ids[i][4])));
+        allTeamItems.push_back(Team((team_ids[i][0]), stoi(team_ids[i][1]), convert_member_ids(team_ids[i][2]),
+                                    stoi(team_ids[i][3]), stod(team_ids[i][4])));
+        ;
     }
     return allTeamItems;
 }
@@ -380,17 +489,13 @@ vector<Salary> ReadFiles ::read_salary_file()
     return allSalaryItems;
 }
 
-void OutputFiles ::show_salary_config(vector<Salary> salary, string level)
+void HandleCommand ::show_salary_config(string level)
 {
-    bool not_found = true;
-    for (auto x : salary)
-        if (x.get_level() == level)
-        {
-            x.print_salary();
-            not_found = false;
-        }
-    if (not_found)
+    int salary_index = find_level(level);
+    if (salary_index == NOT_FOUND)
         cout << ERROR_LEVEL << endl;
+    else
+        salaries[salary_index].print_salary();
 }
 
 int HandleCommand ::find_level(string level_name)
@@ -398,7 +503,9 @@ int HandleCommand ::find_level(string level_name)
     for (int i = 0; i < salaries.size(); i++)
     {
         if (salaries[i].get_level() == level_name)
+        {
             return i;
+        }
     }
     return NOT_FOUND;
 }
@@ -421,7 +528,7 @@ bool HandleCommand ::available_add_request(int id, int day, int start, int end)
         cout << ERROR_ARGUMENTS << endl;
         return false;
     }
-    if(start < 0 || start > 24 || end > 24 || end < 0)
+    if (start < 0 || start > 24 || end > 24 || end < 0)
     {
         cout << ERROR_ARGUMENTS << endl;
         return false;
@@ -450,11 +557,115 @@ void HandleCommand ::add_working_hour(vector<string> command_words)
     }
 }
 
+void HandleCommand::report_total_hours_per_day(vector<string> commands)
+{
+    int start = stoi(commands[1]), end = stoi(commands[2]);
+    vector<pair<int, int>> sum_of_each_day;
+    for (int i = start; i <= end; i++)
+    {
+        int sum = 0;
+        for (auto x : working_hours)
+            if (x->get_day() == i)
+                sum += x->calculate_duration();
+        sum_of_each_day.push_back({sum, i});
+        cout << "Day #" << i << ": " << sum << endl;
+    }
+    cout << "---" << endl;
+    vector<int> mins, maxs;
+    for (int i = 0; i < sum_of_each_day.size(); i++)
+    {
+        bool is_max = false, is_min = false;
+        for (int j = 0; j < sum_of_each_day.size(); j++)
+        {
+            if (i != j && sum_of_each_day[i].first > sum_of_each_day[j].first)
+                is_max = true;
+            if (i != j && sum_of_each_day[i].first < sum_of_each_day[j].first)
+                is_min = true;
+        }
+        if (is_min && !is_max)
+            mins.push_back(sum_of_each_day[i].second);
+        if (is_max && !is_min)
+            maxs.push_back(sum_of_each_day[i].second);
+    }
+    cout << "Day(s) with Max Working Hours:";
+    for (auto x : maxs)
+        cout << ' ' << x;
+    cout << endl
+         << "Day(s) with Min Working Hours:";
+    for (auto x : mins)
+        cout << ' ' << x;
+    cout << endl;
+}
+
+void HandleCommand ::update_team_bonus(vector<string> commands)
+{
+    int teamId = stoi(commands[1]), bonus_percentage = stoi(commands[2]);
+    bool is_team_found = false;
+    if (bonus_percentage < 1 || bonus_percentage > 100)
+    {
+        cout << ERROR_ARGUMENTS << endl;
+        return;
+    }
+    for (int i = 0; i < teams.size(); i++)
+        if (stoi(teams[i].get_team_id()) == teamId)
+        {
+            teams[i].update_bonus(bonus_percentage);
+            is_team_found = true;
+        }
+    if (!is_team_found)
+        cout << ERROR_TEAM << endl;
+}
+
+void HandleCommand ::report_employee_per_hour(vector<string> commands)
+{
+    int start = stoi(commands[1]), end = stoi(commands[2]);
+    vector<pair<double, int>> avr_time;
+    for (int i = start; i < end; i++)
+    {
+        double count = 0;
+        int begin = i, last = i + 1;
+        for (auto x : working_hours)
+        {
+            if ((begin >= x->get_pair().first && begin < x->get_pair().second) || (last > x->get_pair().first &&
+                                                                                   last <= x->get_pair().second))
+                count++;
+        }
+        count /= 30;
+        avr_time.push_back({count, i});
+        cout << begin << '-' << last << ": " << count << endl;
+    }
+    cout << "---" << endl;
+    vector<double> maxs, mins;
+    bool is_max = false, is_min = false;
+    for (int i = 0; i < avr_time.size(); i++)
+    {
+        for (int j = 0; j < avr_time.size(); j++)
+        {
+            if (i != j && avr_time[i].first > avr_time[j].first)
+                is_max = true;
+            if (i != j && avr_time[i].first < avr_time[j].first)
+                is_min = true;
+        }
+        if (is_max && !is_min)
+            maxs.push_back(avr_time[i].second);
+        if (!is_max && is_min)
+            mins.push_back(avr_time[i].second);
+    }
+    cout << "Period(s) with Max Working Employees:";
+    for (auto x : maxs)
+        cout << ' ' << x << '-' << x + 1;
+    cout << endl
+         << "Period(s) with Min Working Employees:";
+    for (auto x : mins)
+        cout << ' ' << x << '-' << x + 1;
+    cout << endl;
+}
+
 void HandleCommand ::free_trash_data(int day, int id)
 {
-    for(int i = 0; i < working_hours.size(); i++)
+    for (int i = 0; i < working_hours.size(); i++)
     {
-        if( id == working_hours[i]->get_id() && day == working_hours[i]->get_day())
+        if (id == working_hours[i]->get_id() && day == working_hours[i]->get_day())
         {
             delete working_hours[i];
             working_hours.erase(working_hours.begin() + i);
@@ -467,33 +678,47 @@ void HandleCommand ::delete_working_hours(vector<string> command_words)
 {
     int day = stoi(command_words[2]);
     int employee_index = find_employee(stoi(command_words[1]));
-    if(employee_index == NOT_FOUND)
+    if (employee_index == NOT_FOUND)
         cout << ERROR_EMPLOYEE << endl;
     else
     {
-        if(day > 30 || day < 1)
+        if (day > 30 || day < 1)
             cout << ERROR_ARGUMENTS << endl;
         else
         {
             employees[employee_index].delete_working_hours(day);
             free_trash_data(day, stoi(command_words[1]));
+            cout << DONE_SUCCESSFULLY_MESSAGE << endl;
         }
+    }
+}
+
+void HandleCommand ::report_employee_salary(vector<string> command_words)
+{
+    int employee_index = find_employee(stoi(command_words[1]));
+    if (employee_index == NOT_FOUND)
+        cout << ERROR_EMPLOYEE << endl;
+    else
+    {
+        employees[employee_index].show_personal_info();
+        employees[employee_index].show_working_info();
     }
 }
 
 void HandleCommand ::get_command()
 {
-    OutputFiles the_output;
     string command, line;
     while (getline(cin, line))
     {
         // for (auto i : employees)
         //     i.print_file();
+        // for (auto i : teams)
+        //     i.print_team();
         vector<string> command_words = split_words(line, SPACE);
         command = command_words[0];
         if (command == "show_salary_config")
         {
-            the_output.show_salary_config(salaries, command_words[1]);
+            show_salary_config(command_words[1]);
         }
         if (command == "add_working_hours")
         {
@@ -501,8 +726,16 @@ void HandleCommand ::get_command()
         }
         if (command == "update_salary_config")
             update_salary_config(command_words);
+        if (command == "report_total_hours_per_day")
+            report_total_hours_per_day(command_words);
+        if (command == "report_employee_per_hour")
+            report_employee_per_hour(command_words); // needs a fix
+        if (command == "update_team_bonus")
+            update_team_bonus(command_words);
         if (command == "delete_working_hours")
             delete_working_hours(command_words);
+        if (command == "report_employee_salary")
+            report_employee_salary(command_words);
     }
 }
 
@@ -523,6 +756,19 @@ void HandleCommand ::match_employees_and_teams()
     }
 }
 
+void HandleCommand ::match_employees_and_levels()
+{
+    for (int i = 0; i < employees.size(); i++)
+    {
+        string level_name = employees[i].get_level_name();
+        int level_index = find_level(level_name);
+        if (level_index != NOT_FOUND)
+        {
+            employees[i].set_level(&salaries[level_index]);
+        }
+    }
+}
+
 void HandleCommand ::load_data()
 {
     ReadFiles my_input;
@@ -532,6 +778,7 @@ void HandleCommand ::load_data()
     salaries = my_input.read_salary_file();
     initial_working_hours();
     match_employees_and_teams();
+    match_employees_and_levels();
 }
 
 int HandleCommand ::find_employee(int id)
