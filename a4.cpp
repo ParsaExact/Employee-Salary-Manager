@@ -111,7 +111,7 @@ public:
     int calculate_bonus();
     int calculate_total_earning();
     void add_working_hour(WorkingHour *hour);
-    void delete_working_hours();
+    void delete_working_hours(int day);
 
 private:
     vector<WorkingHour *> working_days;
@@ -153,6 +153,8 @@ public:
     void report_total_hours_per_day(vector<string> commands);
     void update_team_bonus(vector<string> commands, vector<Team *> teams);
     void report_employee_per_hour(vector<string> command);
+    void delete_working_hours(vector<string> command_words);
+    void free_trash_data(int day, int id);
 
 private:
     bool available_add_request(int id, int day, int start, int end);
@@ -204,8 +206,9 @@ void WorkingHour ::print_working_hour()
 
 bool WorkingHour ::available_add_working_hour(int id, int new_day, int start, int end)
 {
-    if (((start >= working_hour.first && start < working_hour.second) || (end > working_hour.first &&
-                                                                          end <= working_hour.second)) &&
+    if ((((start >= working_hour.first && start < working_hour.second) || (end > working_hour.first &&
+                                                                           end <= working_hour.second)) ||
+         (start <= working_hour.first && end >= working_hour.second)) &&
         new_day == day && id == employee_id)
     {
         cout << ERROR_INTERVAL << endl;
@@ -279,6 +282,18 @@ void Employee ::print_file()
 void Employee ::add_working_hour(WorkingHour *hour)
 {
     working_days.push_back(hour);
+}
+
+void Employee ::delete_working_hours(int day)
+{
+    for (int i = 0; i < working_days.size(); i++)
+    {
+        if (working_days[i]->get_day() == day)
+        {
+            working_days.erase(working_days.begin() + i);
+            i--;
+        }
+    }
 }
 
 pair<int, int> ReadFiles ::convert_interval_to_pair(string s)
@@ -512,46 +527,77 @@ void HandleCommand ::update_team_bonus(vector<string> commands, vector<Team *> t
 void HandleCommand ::report_employee_per_hour(vector<string> commands)
 {
     int start = stoi(commands[1]), end = stoi(commands[2]);
-    vector<pair<double,int>> avr_time;
+    vector<pair<double, int>> avr_time;
     for (int i = start; i < end; i++)
     {
         double count = 0;
         int begin = i, last = i + 1;
-        for (auto x : working_hours){
-            if ((begin >= x->get_pair().first && begin < x->get_pair().second)
-                || (last > x->get_pair().first &&
-                    last <= x->get_pair().second))
+        for (auto x : working_hours)
+        {
+            if ((begin >= x->get_pair().first && begin < x->get_pair().second) || (last > x->get_pair().first &&
+                                                                                   last <= x->get_pair().second))
                 count++;
         }
-        count/=30;
-        avr_time.push_back({count,i});
-        cout<<begin<<'-'<<last<<": "<<count<<endl;
+        count /= 30;
+        avr_time.push_back({count, i});
+        cout << begin << '-' << last << ": " << count << endl;
     }
-    cout<<"---"<<endl;
-    vector<double> maxs , mins;
-    bool is_max=false, is_min=false;
-    for(int i=0;i<avr_time.size();i++)
+    cout << "---" << endl;
+    vector<double> maxs, mins;
+    bool is_max = false, is_min = false;
+    for (int i = 0; i < avr_time.size(); i++)
     {
-        for(int j=0;j<avr_time.size();j++)
+        for (int j = 0; j < avr_time.size(); j++)
         {
-            if(i!=j && avr_time[i].first>avr_time[j].first)
-                is_max=true;
-            if(i!=j && avr_time[i].first<avr_time[j].first)
-                is_min=true;
+            if (i != j && avr_time[i].first > avr_time[j].first)
+                is_max = true;
+            if (i != j && avr_time[i].first < avr_time[j].first)
+                is_min = true;
         }
-        if(is_max && !is_min)
+        if (is_max && !is_min)
             maxs.push_back(avr_time[i].second);
-        if(!is_max && is_min)
+        if (!is_max && is_min)
             mins.push_back(avr_time[i].second);
     }
-    cout<<"Period(s) with Max Working Employees:";
-    for(auto x:maxs)
-        cout<<' '<<x<<'-'<<x+1;
-    cout<<endl
-        <<"Period(s) with Min Working Employees:";
-    for(auto x:mins)
-        cout<<' '<<x<<'-'<<x+1;
-    cout<<endl;
+    cout << "Period(s) with Max Working Employees:";
+    for (auto x : maxs)
+        cout << ' ' << x << '-' << x + 1;
+    cout << endl
+         << "Period(s) with Min Working Employees:";
+    for (auto x : mins)
+        cout << ' ' << x << '-' << x + 1;
+    cout << endl;
+}
+
+void HandleCommand ::free_trash_data(int day, int id)
+{
+    for (int i = 0; i < working_hours.size(); i++)
+    {
+        if (id == working_hours[i]->get_id() && day == working_hours[i]->get_day())
+        {
+            delete working_hours[i];
+            working_hours.erase(working_hours.begin() + i);
+            i--;
+        }
+    }
+}
+
+void HandleCommand ::delete_working_hours(vector<string> command_words)
+{
+    int day = stoi(command_words[2]);
+    int employee_index = find_employee(stoi(command_words[1]));
+    if (employee_index == NOT_FOUND)
+        cout << ERROR_EMPLOYEE << endl;
+    else
+    {
+        if (day > 30 || day < 1)
+            cout << ERROR_ARGUMENTS << endl;
+        else
+        {
+            employees[employee_index].delete_working_hours(day);
+            free_trash_data(day, stoi(command_words[1]));
+        }
+    }
 }
 
 void HandleCommand ::get_command()
@@ -582,6 +628,8 @@ void HandleCommand ::get_command()
             report_employee_per_hour(command_words); // needs a fix
         // if (command == "update_team_bonus")
         // update_team_bonus(command_words, teams);
+        if (command == "delete_working_hours")
+            delete_working_hours(command_words);
     }
 }
 
