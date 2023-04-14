@@ -23,6 +23,8 @@ const string DONE_SUCCESSFULLY_MESSAGE = "OK";
 const string EMPLOYEE_WITH_NO_TEAM = "N/A";
 const string ERROR_TEAM = "TEAM_NOT_FOUND";
 const string ERROR_BONUS_TEAM = "NO_BONUS_TEAMS";
+const string NO_CHANGE = "-";
+const string NO_CHANGE_BUG = "-\r";
 
 const char COMMA = ',';
 const char DASH = '-';
@@ -39,14 +41,14 @@ class Team
 {
 public:
     int get_head_id() { return team_head_id; }
-    string get_team_id() { return team_id; }
-    void set_team_id(string _team_id) { team_id = _team_id; }
-    vector<int> get_mem_ids() { return member_ids; }
-    void update_bonus(int bonus_perc) { bonus = bonus_perc; };
-    int get_bonus() { return bonus; }
     Team(string ti, int thi, vector<int> mmids, int bmwh, double bwhmv)
         : team_id(ti), team_head_id(thi), member_ids(mmids), bonus_min_working_hours(bmwh),
           bonus_working_hour_max_variance(bwhmv), bonus(INITIAL_BOUNUS) {}
+    string get_team_id() { return team_id; }
+    void set_team_id(string _team_id) { team_id = _team_id; }
+    vector<int> get_mem_ids() { return member_ids; }
+    void update_bonus(int bonus_perc);
+    int get_bonus() { return bonus; }
     void print_team(string head_name);
     int get_bonus_min_working_hours() { return bonus_min_working_hours; }
     double get_bonus_working_hour_max_variance() { return bonus_working_hour_max_variance; }
@@ -165,7 +167,7 @@ public:
     void report_employee_salary(vector<string> command_words);
     void show_salary_config(string level);
     int find_level(string name);
-    void update_team_bonus(vector<string> commands, vector<Team> teams);
+    void update_team_bonus(vector<string> commands);
     void report_employee_per_hour(vector<string> command);
     void delete_working_hours(vector<string> command_words);
     void report_team_salary(string team_id);
@@ -209,6 +211,7 @@ vector<string> split_words(string line, char del)
     }
     return words_in_line;
 }
+
 double round_to(double pre, double value) { return round(value / pre) * pre; }
 
 void Team ::print_team(string head_name)
@@ -216,6 +219,11 @@ void Team ::print_team(string head_name)
     cout << "ID: " << team_id << endl
          << "Head ID: " << team_head_id << endl
          << "Head Name: " << head_name << endl;
+}
+
+void Team ::update_bonus(int bonus_perc)
+{
+    bonus = bonus_perc;
 }
 
 void WorkingHour ::print_working_hour()
@@ -275,7 +283,7 @@ void Salary ::update_official_working_hours(string new_official_working_hours)
 
 void Salary ::update_tax_percantage(string new_tax_percantage)
 {
-    if (new_tax_percantage == "-")
+    if (new_tax_percantage == NO_CHANGE || new_tax_percantage == NO_CHANGE_BUG)
         return;
     tax_percantage = stoi(new_tax_percantage);
 }
@@ -374,6 +382,8 @@ int Employee ::calculate_salary()
 
 int Employee ::calculate_bonus()
 {
+    if (employee_team == NULL)
+        return 0;
     double bonus = double(calculate_salary()) * employee_team->get_bonus() / 100.0;
     bonus = round_to(1, bonus);
     return int(bonus);
@@ -430,6 +440,8 @@ WORDS ReadFiles ::read_file(string filename)
     getline(file, line);
     while (getline(file, line))
     {
+        if (line[line.size() - 1] == '\r' && line.size() != 1)
+            line = line.substr(0, line.size() - 1);
         vector<string> words = split_words(line, COMMA);
         all_words.push_back(words);
     }
@@ -443,8 +455,10 @@ vector<Employee> ReadFiles ::read_employee_file(string folder)
     vector<Employee> allEmp;
     for (int i = 0; i < employee_items.size(); i++)
     {
+        if (employee_items[i][3][employee_items[i][3].size() - 1] == '\r')
+            employee_items[i][3] = employee_items[i][3].substr(0, employee_items[i][3].size() - 1);
         allEmp.push_back(Employee(stoi(employee_items[i][0]), employee_items[i][1], stoi(employee_items[i][2]),
-                                  employee_items[i][3].substr(0, employee_items[i][3].size() - 1)));
+                                  employee_items[i][3]));
     }
     return allEmp;
 }
@@ -578,6 +592,11 @@ void HandleCommand ::add_working_hour(vector<string> command_words)
 void HandleCommand::report_total_hours_per_day(vector<string> commands)
 {
     int start = stoi(commands[1]), end = stoi(commands[2]);
+    if (start < 1 || end > 30 || start > end)
+    {
+        cout << ERROR_ARGUMENTS << endl;
+        return;
+    }
     vector<pair<int, int>> sum_of_each_day;
     for (int i = start; i <= end; i++)
     {
@@ -615,11 +634,11 @@ void HandleCommand::report_total_hours_per_day(vector<string> commands)
     cout << endl;
 }
 
-void HandleCommand ::update_team_bonus(vector<string> commands, vector<Team> teams)
+void HandleCommand ::update_team_bonus(vector<string> commands)
 {
     int teamId = stoi(commands[1]), bonus_percentage = stoi(commands[2]);
     bool is_team_found = false;
-    if (bonus_percentage < 1 || bonus_percentage > 100)
+    if (bonus_percentage < 0 || bonus_percentage > 100)
     {
         cout << ERROR_ARGUMENTS << endl;
         return;
@@ -643,7 +662,6 @@ void HandleCommand ::report_employee_per_hour(vector<string> commands)
     int start = stoi(commands[1]), end = stoi(commands[2]);
     if (start > 24 || start < 0 || end > 24 || end < 0 || start >= end)
     {
-        cout<<start<<' '<<end<<endl;
         cout << ERROR_ARGUMENTS << endl;
         return;
     }
@@ -740,6 +758,7 @@ void HandleCommand ::report_employee_salary(vector<string> command_words)
         employees[employee_index].show_working_info();
     }
 }
+
 string HandleCommand ::find_head_name(int head_id)
 {
     for (auto x : employees)
@@ -749,6 +768,7 @@ string HandleCommand ::find_head_name(int head_id)
     }
     return "";
 }
+
 vector<Employee> HandleCommand ::report_team(string teamId)
 {
     vector<Employee> team_employees;
@@ -771,17 +791,21 @@ vector<Employee> HandleCommand ::report_team(string teamId)
     int sum_of_working_hours = 0;
     double count_team_members = 0;
     for (auto x : employees)
-        if (x.get_team_id()->get_team_id() == teamId)
-        {
-            team_employees.push_back(x);
-            sum_of_working_hours += x.calculate_working_hours();
-            count_team_members++;
-        }
+    {
+        if (x.get_team_id() != NULL)
+            if (x.get_team_id()->get_team_id() == teamId)
+            {
+                team_employees.push_back(x);
+                sum_of_working_hours += x.calculate_working_hours();
+                count_team_members++;
+            }
+    }
     double avrg = sum_of_working_hours / count_team_members;
     cout << "Team Total Working Hours: " << sum_of_working_hours << endl
          << "Average Member Working Hours: " << fixed << setprecision(1) << avrg << endl;
     return team_employees;
 }
+
 void HandleCommand ::report_team_salary(string teamId)
 {
     vector<Employee> team_employees = report_team(teamId);
@@ -823,18 +847,24 @@ vector<Employee> HandleCommand ::sort_employee(vector<Employee> &employees)
 
 void HandleCommand ::sort_teams(vector<Team> &teams)
 {
-    for (int i = 0; i < teams.size(); i++)
+    for (int i = 0; i < teams.size() - 1; i++)
         for (int j = i + 1; j < teams.size(); j++)
             if (sum_of_working_hours(teams[i].get_team_id()) < sum_of_working_hours(teams[j].get_team_id()))
+            {
                 swap(teams[i], teams[j]);
+                match_employees_and_teams();
+            }
 }
 
 int HandleCommand ::sum_of_working_hours(string teamId)
 {
     int sum = 0;
-    for (auto x : employees)
-        if (x.get_team_id()->get_team_id() == teamId)
-            sum += x.calculate_working_hours();
+    for (int i = 0; i < employees.size(); i++)
+    {
+        if (employees[i].get_team_id() != NULL)
+            if ((employees[i].get_team_id())->get_team_id() == teamId)
+                sum += employees[i].calculate_working_hours();
+    }
     return sum;
 }
 
@@ -873,11 +903,14 @@ void HandleCommand ::find_teams_for_bonus()
     if (!is_team_found)
         cout << ERROR_BONUS_TEAM << endl;
 }
+
 void HandleCommand ::get_command()
 {
     string command, line;
     while (getline(cin, line))
     {
+        if (line[line.size() - 1] == '\r' && line.size() != 1)
+            line = line.substr(0, line.size() - 1);
         vector<string> command_words = split_words(line, SPACE);
         command = command_words[0];
         if (command == "show_salary_config")
@@ -891,7 +924,7 @@ void HandleCommand ::get_command()
         if (command == "report_employee_per_hour")
             report_employee_per_hour(command_words);
         if (command == "update_team_bonus")
-            update_team_bonus(command_words, teams);
+            update_team_bonus(command_words);
         if (command == "delete_working_hours")
             delete_working_hours(command_words);
         if (command == "report_employee_salary")
