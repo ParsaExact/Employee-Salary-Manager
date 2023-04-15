@@ -827,11 +827,19 @@ void Process ::sort_teams(vector<Team> &teams)
 {
     for (int i = 0; i < teams.size() - 1; i++)
         for (int j = i + 1; j < teams.size(); j++)
+        {
             if (sum_of_working_hours(teams[i].get_team_id()) < sum_of_working_hours(teams[j].get_team_id()))
             {
                 swap(teams[i], teams[j]);
                 match_employees_and_teams();
             }
+            if (sum_of_working_hours(teams[i].get_team_id()) == sum_of_working_hours(teams[j].get_team_id())
+                && stoi(teams[i].get_team_id()) > stoi(teams[j].get_team_id()))
+            {
+                swap(teams[i], teams[j]);
+                match_employees_and_teams();
+            }
+        }
 }
 
 int Process ::sum_of_working_hours(string teamId)
