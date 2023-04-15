@@ -825,6 +825,8 @@ vector<Employee> Process ::sort_employee(vector<Employee> &employees)
 
 void Process ::sort_teams()
 {
+    if (teams.size() == 0)
+        return;
     for (int i = 0; i < teams.size() - 1; i++)
         for (int j = i + 1; j < teams.size(); j++)
         {
@@ -898,7 +900,9 @@ void Process ::get_command()
     string command, line;
     while (getline(cin, line))
     {
-        if (line[line.size() - 1] == '\r' && line.size() != 1)
+        if (line.size() == 0)
+            break;
+        if (line[line.size() - 1] == '\r' && line.size() > 1)
             line = line.substr(0, line.size() - 1);
         vector<string> command_words = split_words(line, SPACE);
         command = command_words[0];
