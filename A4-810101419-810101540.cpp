@@ -590,17 +590,29 @@ void Process::report_total_hours_per_day(vector<string> commands)
     for (int i = 0; i < sum_of_each_day.size(); i++)
     {
         bool is_max = false, is_min = false;
+        int equal_counter = 0;
         for (int j = 0; j < sum_of_each_day.size(); j++)
         {
             if (i != j && sum_of_each_day[i].first > sum_of_each_day[j].first)
                 is_max = true;
             if (i != j && sum_of_each_day[i].first < sum_of_each_day[j].first)
                 is_min = true;
+            if (i != j && sum_of_each_day[i].first == sum_of_each_day[j].first)
+                equal_counter++;
         }
         if (is_min && !is_max)
             mins.push_back(sum_of_each_day[i].second);
         if (is_max && !is_min)
             maxs.push_back(sum_of_each_day[i].second);
+        if (equal_counter == sum_of_each_day.size() - 1)
+        {
+            for (auto x : sum_of_each_day)
+            {
+                mins.push_back(x.second);
+                maxs.push_back(x.second);
+            }
+            break;
+        }
     }
     cout << "Day(s) with Max Working Hours:";
     for (auto x : maxs)
@@ -616,14 +628,14 @@ void Process ::update_team_bonus(vector<string> commands)
 {
     int teamId = stoi(commands[1]), bonus_percentage = stoi(commands[2]);
     bool is_team_found = false;
-    if (bonus_percentage < 0 || bonus_percentage > 100)
-    {
-        cout << ERROR_ARGUMENTS << endl;
-        return;
-    }
     for (int i = 0; i < teams.size(); i++)
         if (stoi(teams[i].get_team_id()) == teamId)
         {
+            if (bonus_percentage < 0 || bonus_percentage > 100)
+            {
+                cout << ERROR_ARGUMENTS << endl;
+                return;
+            }
             teams[i].update_bonus(bonus_percentage);
             is_team_found = true;
         }
@@ -665,17 +677,29 @@ void Process ::report_employee_per_hour(vector<string> commands)
     for (int i = 0; i < avr_time.size(); i++)
     {
         bool is_max = false, is_min = false;
+        int equal_counter = 0;
         for (int j = 0; j < avr_time.size(); j++)
         {
             if (i != j && avr_time[i].first > avr_time[j].first)
                 is_max = true;
             if (i != j && avr_time[i].first < avr_time[j].first)
                 is_min = true;
+            if (i != j && avr_time[i].first == avr_time[j].first)
+                equal_counter++;
         }
         if (is_max && !is_min)
             maxs.push_back(avr_time[i].second);
         if (!is_max && is_min)
             mins.push_back(avr_time[i].second);
+        if (equal_counter == avr_time.size() - 1)
+        {
+            for (auto x : avr_time)
+            {
+                maxs.push_back(x.second);
+                mins.push_back(x.second);
+            }
+            break;
+        }
     }
     if (mins.empty() && maxs.empty())
         for (int i = start; i < end; i++)
@@ -778,7 +802,7 @@ vector<Employee> Process ::report_team(string teamId)
                 count_team_members++;
             }
     }
-    double avrg = sum_of_working_hours / count_team_members;
+    double avrg = round_to(0.1, sum_of_working_hours / count_team_members);
     cout << "Team Total Working Hours: " << sum_of_working_hours << endl
          << "Average Member Working Hours: " << fixed << setprecision(1) << avrg << endl;
     return team_employees;
