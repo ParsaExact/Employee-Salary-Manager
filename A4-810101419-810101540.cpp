@@ -850,8 +850,11 @@ double Process ::variance_of_team(string teamId)
 {
     vector<double> working_hours;
     for (auto x : employees)
-        if (x.get_team_id()->get_team_id() == teamId)
-            working_hours.push_back(double(x.calculate_working_hours()));
+    {
+        if (x.get_team_id() != NULL)
+            if (x.get_team_id()->get_team_id() == teamId)
+                working_hours.push_back(double(x.calculate_working_hours()));
+    }
     double sum = 0, sum_of_squers = 0, avrg, variance;
     for (auto x : working_hours)
         sum += x;
